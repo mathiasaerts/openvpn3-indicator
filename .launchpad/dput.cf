@@ -1,0 +1,6 @@
+[publish]
+fqdn = ppa.launchpad.net
+method = sftp
+login = grzegorz-gutowski
+incoming = ~grzegorz-gutowski/ubuntu/openvpn3-indicator/
+allow_unsigned_uploads = 0

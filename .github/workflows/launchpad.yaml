@@ -19,6 +19,16 @@ jobs:
         KEY: ${{ secrets.GPG_LAUNCHPAD_KEY }}
       run: |
         echo "${KEY}" | gpg --import
+    - name: Install SSH Key
+      env:
+        KEY: ${{ secrets.SSH_LAUNCHPAD_KEY }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "${KEY}" > ~/.ssh/id_ed25519
+        echo "Host ppa.launchpad.net" > ~/.ssh/config
+        echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+        echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+        echo "  GlobalKnownHostsFile /dev/null" >> ~/.ssh/config
     - name: Deploy
       run: |
         make -C .launchpad
