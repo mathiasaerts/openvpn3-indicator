@@ -41,8 +41,8 @@ os.environ['LC_ALL'] = 'en_US.UTF-8'
 
 subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', str(gitdir)])
 
-timestamp_run = subprocess.run(['git', '-C', str(gitdir), 'log', '-n', '1', '--format=format:%cd', '--date=format-local:%Y%m%d%H%M%S'], capture_output=True)
-TIMESTAMP = str(timestamp_run.stdout, 'utf-8').strip()
+version_run = subprocess.run(['scripts/semver'], cwd=gitdir, capture_output=True)
+VERSION = str(version_run.stdout, 'utf-8').strip()
 
 icon_path = gitdir / 'share' / 'icons'
 ICON_THEMES = [ str(p.relative_to(icon_path)) for p in icon_path.glob('*') if p.is_dir() ]
@@ -61,7 +61,6 @@ man_path = gitdir / 'share' / 'man'
 MANS = [ str(p.relative_to(man_path.parent)) for p in man_path.glob('**/*.[1-8]') if p.is_file() ]
 
 NAME      = 'openvpn3-indicator'
-VERSION   = f'0.1.{TIMESTAMP}'
 RELEASE   = '1' #'1%{?dist}'
 SUMMARY   = 'Simple GTK indicator GUI for OpenVPN3'
 DESCRIPTION = '''
@@ -84,7 +83,14 @@ REQUIRES  = ' '.join(sorted([
         'python3-dbus',
         'python3-secretstorage',
         'python3-setproctitle',
-        'gnome-shell-extension-appindicator',
+    ]))
+RECOMMENDS = ' '.join(sorted([
+        '('+' or '.join([
+            'gnome-shell-extension-appindicator',
+            'ayatana-indicator-application',
+            'xapp-sn-watcher',
+            'xfce4-statusnotifier-plugin',
+        ])+')',
     ]))
 
 SOURCES = [
@@ -103,11 +109,11 @@ PREP = '\n'.join([
     ])
 
 BUILD = '\n'.join([
-        'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} HARDCODE_PYTHON=/usr/bin/python3 all',
+        f'make VERSION={VERSION} '+'DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} HARDCODE_PYTHON=/usr/bin/python3 all',
     ])
 
 INSTALL = '\n'.join([
-        'make DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} package',
+        f'make VERSION={VERSION} '+'DESTDIR=%{buildroot} BINDIR=%{_bindir} DATADIR=%{_datadir} package',
     ] + [
         'desktop-file-validate %{buildroot}%{_datadir}/'+path for path in APPS
     ])
@@ -165,6 +171,7 @@ URL: {URL}
 BuildArch: {BUILDARCH}
 BuildRequires: {BUILDREQUIRES}
 Requires: {REQUIRES}
+Recommends: {RECOMMENDS}
 Source: {SOURCECODE}
 
 %description

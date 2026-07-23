@@ -34,7 +34,7 @@ scriptdir=pathlib.Path(args.scriptdir)
 outdir=pathlib.Path(args.outdir)
 gitdir=scriptdir.parent
 
-DISTROS = ['focal','jammy','noble','plucky','questing','resolute']
+DISTROS = ['jammy','noble','questing','resolute','stonking']
 
 
 os.environ['TZ'] = 'UTC'
@@ -42,8 +42,8 @@ os.environ['LC_ALL'] = 'en_US.UTF-8'
 
 subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', str(gitdir)])
 
-timestamp_run = subprocess.run(['git', '-C', str(gitdir), 'log', '-n', '1', '--format=format:%cd', '--date=format-local:%Y%m%d%H%M%S'], capture_output=True)
-TIMESTAMP = str(timestamp_run.stdout, 'utf-8').strip()
+version_run = subprocess.run(['scripts/semver'], cwd=gitdir, capture_output=True)
+VERSION = str(version_run.stdout, 'utf-8').strip()
 
 icon_path = gitdir / 'share' / 'icons'
 ICON_THEMES = [ str(p.relative_to(icon_path)) for p in icon_path.glob('*') if p.is_dir() ]
@@ -65,7 +65,6 @@ for DISTRO in DISTROS:
     MAINTAINER = 'Grzegorz Gutowski <grzegorz.gutowski@uj.edu.pl>'
     PRIORITY  = 'optional'
     SECTION   = 'net'
-    VERSION   = f'0.1.{TIMESTAMP}'
     RELEASE   = DISTRO
     SUMMARY   = 'Simple GTK indicator GUI for OpenVPN3'
     DESCRIPTION = '''This project adds a simple GTK indicator application that can be used to control OpenVPN3 tunnels.
@@ -91,6 +90,15 @@ It should be considered as a temporary work-around until Network Manager impleme
             'python3-setproctitle',
             'gir1.2-ayatanaappindicator3-0.1',
         ]
+    RECOMMENDS = [
+            ' | '.join([
+                'gnome-shell-extension-appindicator',
+                'ayatana-indicator-application',
+                'xapp-sn-watcher',
+                'xfce4-statusnotifier-plugin'
+            ]),
+        ]
+
 
     SOURCES = [
         'src',
@@ -127,6 +135,7 @@ Homepage: {URL}
 Package: {NAME}
 Architecture: all
 Depends: {", ".join(sorted(REQUIRES))}
+Recommends: {", ".join(sorted(RECOMMENDS))}
 Description: 
 {NEWLINE.join(["  "+line for line in DESCRIPTION.split(NEWLINE)])}
 ''')
@@ -139,10 +148,10 @@ f'''#!/usr/bin/make -f
 clean:
 
 build:
-    make DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share HARDCODE_PYTHON=/usr/bin/python3 all
+    make VERSION={VERSION} DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share HARDCODE_PYTHON=/usr/bin/python3 all
 
 binary:
-    make DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share HARDCODE_PYTHON=/usr/bin/python3 package
+    make VERSION={VERSION} DESTDIR=debian/{NAME} BINDIR=/usr/bin DATADIR=/usr/share HARDCODE_PYTHON=/usr/bin/python3 package
     dh_gencontrol
     dh_builddeb
 '''))
