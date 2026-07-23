@@ -3,9 +3,9 @@ outdir ?= $(OFFICE)/.packages
 
 .PHONY: deb
 deb: $(OFFICE)/openvpn3-indicator.control.py
-	git describe --tags
-	git tag --list
 	git log -n 1
+	git tag --list
+	git describe --tags
 	../scripts/semver
 	rm -rf $(outdir)
 	python3 $< --scriptdir $(OFFICE) --outdir $(outdir)
