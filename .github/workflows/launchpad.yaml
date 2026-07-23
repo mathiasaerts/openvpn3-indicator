@@ -26,6 +26,7 @@ jobs:
       run: |
         mkdir -p ~/.ssh
         echo "${KEY}" > ~/.ssh/id_ed25519
+        chmod 400 ~/.ssh/id_ed25519
         echo "Host ppa.launchpad.net" > ~/.ssh/config
         echo "  StrictHostKeyChecking no" >> ~/.ssh/config
         echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
