@@ -3,6 +3,10 @@ outdir ?= $(OFFICE)/.packages
 
 .PHONY: deb
 deb: $(OFFICE)/openvpn3-indicator.control.py
+	git describe --tags
+	git tag --list
+	git log -n 1
+	../scripts/semver
 	rm -rf $(outdir)
 	python3 $< --scriptdir $(OFFICE) --outdir $(outdir)
 	find $(outdir) -name "*_source.changes" -exec debsign --no-conf "-mGrzegorz Gutowski Github Actions <grzegorz.gutowski@uj.edu.pl>" --re-sign -S {} ";"
