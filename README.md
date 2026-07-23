@@ -33,6 +33,17 @@ sudo add-apt-repository ppa:grzegorz-gutowski/openvpn3-indicator
 sudo apt install openvpn3-indicator
 ```
 
+### Debian
+
+On Debian testing (forky) and Debian unstable (sid), there are packages in the [official repositories](https://packages.debian.org/sid/openvpn3-indicator).
+Installation instructions:
+
+```sh
+sudo apt install openvpn3-indicator
+```
+
+On Debian stable (trixie) the package is in the [Fast Forward](https://fastforward.debian.net) repository.
+
 ### Fedora + RHEL
 
 Packages are hosted in [Fedora Copr repository](https://copr.fedorainfracloud.org/coprs/grzegorz-gutowski/openvpn3-indicator/) .
