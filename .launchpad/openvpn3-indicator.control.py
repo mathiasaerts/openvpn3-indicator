@@ -34,7 +34,7 @@ scriptdir=pathlib.Path(args.scriptdir).resolve()
 outdir=pathlib.Path(args.outdir).resolve()
 gitdir=scriptdir.parent
 
-DISTROS = ['jammy','noble','questing','resolute','stonking']
+DISTROS = ['jammy','noble','resolute','stonking']
 
 
 os.environ['TZ'] = 'UTC'
