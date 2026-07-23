@@ -30,8 +30,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--scriptdir', default=os.getcwd())
 parser.add_argument('--outdir', default=os.getcwd())
 args = parser.parse_args()
-scriptdir=pathlib.Path(args.scriptdir)
-outdir=pathlib.Path(args.outdir)
+scriptdir=pathlib.Path(args.scriptdir).resolve()
+outdir=pathlib.Path(args.outdir).resolve()
 gitdir=scriptdir.parent
 
 
@@ -43,6 +43,7 @@ subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', str(gitd
 
 version_run = subprocess.run(['scripts/semver'], cwd=gitdir, capture_output=True)
 VERSION = str(version_run.stdout, 'utf-8').strip()
+VERSION_SIMPLE = re.sub(r'[-]', r'.', VERSION)
 
 icon_path = gitdir / 'share' / 'icons'
 ICON_THEMES = [ str(p.relative_to(icon_path)) for p in icon_path.glob('*') if p.is_dir() ]
@@ -101,8 +102,8 @@ SOURCES = [
     'README.md',
     'share',
 ]
-SOURCECODE = outdir / f'openvpn3-indicator-{VERSION}.tar.gz'
-source_run = subprocess.run(['tar', '--create', '--auto-compress', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION}/|', '--directory', str(gitdir) ] + SOURCES)
+SOURCECODE = outdir / f'openvpn3-indicator-{VERSION_SIMPLE}.tar.gz'
+source_run = subprocess.run(['tar', '--create', '--auto-compress', '--file', SOURCECODE, '--transform', f'flags=r;s|^|openvpn3-indicator-{VERSION_SIMPLE}/|', '--directory', str(gitdir) ] + SOURCES)
 
 PREP = '\n'.join([
         '%setup'
@@ -163,7 +164,7 @@ CHANGELOG = str(changelog_run.stdout, 'utf-8').strip()
 
 (outdir / 'openvpn3-indicator.spec').write_text(f'''
 Name: {NAME}
-Version: {VERSION}
+Version: {VERSION_SIMPLE}
 Release: {RELEASE}
 Summary: {SUMMARY}
 License: {LICENSE}

@@ -30,8 +30,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--scriptdir', default=os.getcwd())
 parser.add_argument('--outdir', default=os.getcwd())
 args = parser.parse_args()
-scriptdir=pathlib.Path(args.scriptdir)
-outdir=pathlib.Path(args.outdir)
+scriptdir=pathlib.Path(args.scriptdir).resolve()
+outdir=pathlib.Path(args.outdir).resolve()
 gitdir=scriptdir.parent
 
 DISTROS = ['jammy','noble','questing','resolute','stonking']
