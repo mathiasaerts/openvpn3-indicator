@@ -4,7 +4,7 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 DATADIR ?= $(PREFIX)/share
 AUTOSTART ?= /etc/xdg/autostart
-VERSION ?= $(shell git log -n 1 --format=format:devel-%cd-%h  --date=format-local:%Y%m%d%H%M%S)
+VERSION ?= $(shell scripts/semver)
 PREPAREDIR ?= build/prepare
 
 DESTDIR := $(DESTDIR:/=)
@@ -67,11 +67,11 @@ endif
 
 $(PREPARE_SOURCES): $(PREPAREDIR)/% : src/%
 	@install --directory $(dir $@)
-	install --mode 0644 $< $@
+	@install --mode 0644 $< $@
 
 $(PREPARE_ABOUT): $(PREPAREDIR)/% : src/%
 	@install --directory $(dir $@)
-	install --mode 0644 $< $@
+	@install --mode 0644 $< $@
 	sed -E -e "s|^( *APPLICATION_VERSION *= *)'[^']*'$$|\1'$(VERSION)'|" -i $@
 
 .PHONY: package
@@ -87,11 +87,11 @@ install: package
 
 $(DESTDIR)$(BINDIR)/$(PROGRAM) : $(PROGRAM)
 	@install --directory $(dir $@)
-	install --mode 0755 $< $@
+	@install --mode 0755 $< $@
 
 $(INSTALL_SHARES): $(DESTDIR)$(DATADIR)/% : share/%
 	@install --directory $(dir $@)
-	install --mode 0644 $< $@
+	@install --mode 0644 $< $@
 
 $(INSTALL_MANS): $(DESTDIR)$(DATADIR)/%.gz : share/%
 	@install --directory $(dir $@)
@@ -105,7 +105,7 @@ $(INSTALL_APPLICATION): share/$(APPLICATION)
 
 $(INSTALL_AUTOSTART) : $(INSTALL_APPLICATION)
 	@install --directory $(dir $@)
-	install --mode 0644 $< $@
+	@install --mode 0644 $< $@
 
 .PHONY: uninstall
 uninstall:
