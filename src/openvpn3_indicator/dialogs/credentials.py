@@ -63,10 +63,10 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
             entry.set_visibility(False)
         if user_input.can_store:
             can_store = True
-        if user_input.value is not None:
+        if user_input.value:
             entry.set_text(user_input.value)
             default_store = True
-        if not entry.get_text() and focus_entry is None:
+        elif focus_entry is None:
             focus_entry = entry
         entry.set_activates_default(True)
         grid.attach(entry, 1, row, 1, 1)
