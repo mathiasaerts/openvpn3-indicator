@@ -694,7 +694,7 @@ class Application(Gtk.Application):
             def on_connect(user_inputs, store):
                 credentials = dict([ (ui.name, ui.value) for ui in user_inputs ])
                 if store:
-                    store_credentials = dict([ (ui.name, ui.value) for ui in user_inputs if ui.can_store ])
+                    store_credentials = dict([ (ui.name, ui.value) for ui in user_inputs if ui.can_store and ui.value ])
                     self.store_set_credentials(config_id, store_credentials)
                 else:
                     self.store_clear_credentials(config_id, credentials.keys())
