@@ -1,40 +1,84 @@
 #!/usr/bin/env python3
 
 import argparse
+import logging
 import os
 import pathlib
+import re
 import subprocess
+import sys
 
 os.environ['TZ'] = 'UTC'
 os.environ['LC_ALL'] = 'en_US.UTF-8'
 
-try:
-    parser = argparse.ArgumentParser('semver script for openvpn3-indicator')
-    parser.add_argument('--scriptdir', default=pathlib.Path(__file__).parent)
-    parser.add_argument('--devel', action='store_true')
-    args = parser.parse_args()
-    scriptdir=pathlib.Path(args.scriptdir)
-    gitdir=scriptdir.parent
+logging.basicConfig(level=logging.DEBUG)
 
-    subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', str(gitdir)])
+parser = argparse.ArgumentParser('semver script for openvpn3-indicator')
+parser.add_argument('--scriptdir', default=pathlib.Path(__file__).parent)
+parser.add_argument('--devel', action='store_true')
+parser.add_argument('--bump-patch', action='store_true')
+parser.add_argument('--bump-minor', action='store_true')
+parser.add_argument('--bump-major', action='store_true')
+args = parser.parse_args()
+scriptdir = pathlib.Path(args.scriptdir)
+gitdir = scriptdir.parent
 
-    describe_run = subprocess.run(['git', '-C', str(gitdir), 'describe', '--tags'], capture_output=True)
-    describe = str(describe_run.stdout, 'utf-8').strip()
-    tag = describe.split('-')[0]
-    ver = '.'.join((tag.lstrip('v').split('.')+['0']*3)[:3])
+semver = None
 
-    revparse_run = subprocess.run(['git', 'rev-parse', '--short', tag], capture_output=True)
-    revparse = str(revparse_run.stdout, 'utf-8').strip()
+if semver is None and (gitdir/'.git').is_dir():
+    try:
+        subprocess.run(['git', 'config', '--global', '--add', 'safe.directory', str(gitdir)])
 
-    timestamp_hash_run = subprocess.run(['git', '-C', str(gitdir), 'log', '-n', '1', '--format=format:%cd_%h', '--date=format-local:%Y%m%d%H%M%S'], capture_output=True)
-    timestamp_hash = str(timestamp_hash_run.stdout, 'utf-8').strip()
-    timestamp, hash = timestamp_hash.split('_')
+        describe_run = subprocess.run(['git', '-C', str(gitdir), 'describe', '--tags'], capture_output=True)
+        describe = str(describe_run.stdout, 'utf-8').strip()
+        tag = describe.split('-')[0]
+        ver = '.'.join((tag.lstrip('v').split('.')+['0']*3)[:3])
 
-    devel = args.devel or (revparse != hash)
+        revparse_run = subprocess.run(['git', 'rev-parse', '--short', tag], capture_output=True)
+        revparse = str(revparse_run.stdout, 'utf-8').strip()
 
-    if devel:
-        print(f'{ver}-{timestamp}.devel')
-    else:
-        print(f'{ver}')
-except:
-    print('0.0.0-19700101000000.undefined')
+        timestamp_hash_run = subprocess.run(['git', '-C', str(gitdir), 'log', '-n', '1', '--format=format:%cd_%h', '--date=format-local:%Y%m%d%H%M%S'], capture_output=True)
+        timestamp_hash = str(timestamp_hash_run.stdout, 'utf-8').strip()
+        timestamp, hash = timestamp_hash.split('_')
+
+        devel = args.devel or (revparse != hash)
+
+        if devel:
+            semver = f'{ver}-{timestamp}.devel'
+        else:
+            semver = f'{ver}'
+    except:
+        logging.error('Failed to initialize semantic version from git')
+
+about_path = 'src/openvpn3_indicator/about.py'
+if semver is None and (gitdir/about_path).is_file():
+    try:
+        exec((gitdir/about_path).read())
+        semver = APPLICATION_VERSION
+        sys.exit(0)
+    except:
+        logging.error('Failed to initialize semantic version from about.py')
+
+semver = semver or '0.0.0-19700101000000.undefined'
+
+if args.bump_patch or args.bump_minor or args.bump_major:
+    ver = [int(part) for part in semver.split('-')[0].split('.')]
+    if args.bump_patch:
+        ver[2] += 1
+    if args.bump_minor:
+        ver[1] += 1
+        ver[2] = 0
+    if args.bump_major:
+        ver[0] += 1
+        ver[1] = 0
+        ver[2] = 0
+    semver = '.'.join([str(part) for part in ver])
+    logging.info(f'New version is {semver}')
+    about = (gitdir/about_path).read_text()
+    new_about = re.sub(r'^( *APPLICATION_VERSION *= *)\'[^\']*\' *$', r'\1'+ "'" + semver + "'", about, flags=re.M)
+    (gitdir/about_path).write_text(new_about)
+    subprocess.run(['git', '-C', gitdir, 'commit', '-m', f'Version: {semver}', '--', about_path])
+    subprocess.run(['git', '-C', gitdir, 'tag', '-a', f'v{semver}', '-m', f'Version: {semver}'])
+
+else:
+    print(semver)

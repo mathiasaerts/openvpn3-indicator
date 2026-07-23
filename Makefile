@@ -72,7 +72,7 @@ $(PREPARE_SOURCES): $(PREPAREDIR)/% : src/%
 $(PREPARE_ABOUT): $(PREPAREDIR)/% : src/%
 	@install --directory $(dir $@)
 	@install --mode 0644 $< $@
-	sed -E -e "s|^( *APPLICATION_VERSION *= *)'[^']*'$$|\1'$(VERSION)'|" -i $@
+	sed -E -e "s|^( *APPLICATION_VERSION *= *)'[^']*' *$$|\1'$(VERSION)'|" -i $@
 
 .PHONY: package
 package: $(DESTDIR)$(BINDIR)/$(PROGRAM) $(INSTALL_SHARES) $(INSTALL_MANS) $(INSTALL_AUTOSTART)
