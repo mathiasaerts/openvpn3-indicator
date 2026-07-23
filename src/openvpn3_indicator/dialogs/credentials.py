@@ -54,6 +54,7 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
     entries = list()
     default_store = False
     can_store = False
+    focus_entry = None
     for user_input in user_inputs:
         label = Gtk.Label(label=user_input.name, hexpand=True, xalign=0, margin_right=10)
         grid.attach(label, 0, row, 1, 1)
@@ -62,9 +63,11 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
             entry.set_visibility(False)
         if user_input.can_store:
             can_store = True
-        if user_input.value is not None:
+        if user_input.value:
             entry.set_text(user_input.value)
             default_store = True
+        elif focus_entry is None:
+            focus_entry = entry
         entry.set_activates_default(True)
         grid.attach(entry, 1, row, 1, 1)
         entries.append(entry)
@@ -108,6 +111,8 @@ def construct_credentials_dialog(name, user_inputs, allow_store=True, on_connect
     default.set_can_default(True)
     default.grab_default()
     dialog.show_all()
+    if focus_entry is not None:
+        focus_entry.grab_focus()
     if remain_active is not None:
         GLib.timeout_add(1000, on_schedule)
     return dialog
