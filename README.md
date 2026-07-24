@@ -17,32 +17,41 @@ https://github.com/OpenVPN/openvpn3-indicator/assets/5970093/b9245e81-7896-4b53-
 ## Prerequisites
 
 This application requires the installation of `openvpn3-linux` (https://github.com/OpenVPN/openvpn3-linux).
-There are [pre-built packages](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux) prepared for popular distributions by OpenVPN.
+This software is packaged on recent Linux distributions usually in the package named `openvpn3-client`.
+There are also [pre-built packages](https://community.openvpn.net/openvpn/wiki/OpenVPN3Linux) prepared for popular distributions by OpenVPN.
 
-## Installation instructions (from repositories)
+## Installation instructions (from standard repositories)
 
-Package `openvpn3-indicator` can be installed on popular Linux distributions using the provided repositories.
+Package `openvpn3-indicator` can be installed on some recent Linux distributions using standard repositories.
 
 ### Ubuntu
 
-Packages are hosted in [Ubuntu Launchpad repository](https://launchpad.net/~grzegorz-gutowski/+archive/ubuntu/openvpn3-indicator) .
+Since Ubuntu stonking, `openvpn3-indicator` is packaged in `universe` repository and can be installed using
+```sh
+sudo apt install openvpn3-indicator
+```
+
+### Debian
+
+Since Debian forky, `openvpn3-indicator` is packaged in standard repository and can be installed using
+```sh
+sudo apt install openvpn3-indicator
+```
+For Debian trixie the package is available in the [Fast Forward](https://fastforward.debian.net) repository.
+
+## Installation instructions (from development repositories)
+
+We provide package repositories with the latest development version of `openvpn3-indicator` for Ubuntu and Fedora users.
+
+### Ubuntu
+
+Packages are hosted in [Ubuntu Launchpad repository](https://launchpad.net/~grzegorz-gutowski/+archive/ubuntu/openvpn3-indicator).
 Installation instructions:
 
 ```sh
 sudo add-apt-repository ppa:grzegorz-gutowski/openvpn3-indicator
 sudo apt install openvpn3-indicator
 ```
-
-### Debian
-
-On Debian testing (forky) and Debian unstable (sid), there are packages in the [official repositories](https://packages.debian.org/sid/openvpn3-indicator).
-Installation instructions:
-
-```sh
-sudo apt install openvpn3-indicator
-```
-
-On Debian stable (trixie) the package is in the [Fast Forward](https://fastforward.debian.net) repository.
 
 ### Fedora + RHEL
 
