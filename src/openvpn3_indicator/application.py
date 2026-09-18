@@ -49,6 +49,7 @@ from openvpn3_indicator.about import APPLICATION_ID, APPLICATION_VERSION, APPLIC
 from openvpn3_indicator.about import MANAGER_VERSION_MINIMUM, MANAGER_VERSION_RECOMMENDED
 from openvpn3_indicator.multi_indicator import MultiIndicator
 from openvpn3_indicator.multi_notifier import MultiNotifier
+from openvpn3_indicator.check_menu_item import StateCheckMenuItem
 from openvpn3_indicator.credential_store import CredentialStore
 from openvpn3_indicator.dialogs.about import construct_about_dialog
 from openvpn3_indicator.dialogs.system_checks import construct_appindicator_missing_dialog
@@ -517,7 +518,8 @@ class Application(Gtk.Application):
         startup_action = self.settings.get_string('startup-action') or ''
         menu = Gtk.Menu()
         # Check items: the status host draws the mark of the selected entry
-        # in the menu's left border (dbusmenu toggle-type "checkmark").
+        # in the menu's left border (dbusmenu toggle-type "checkmark").  The
+        # mark follows the setting only, see StateCheckMenuItem.
         choices = [
             ('', gettext.gettext('No Connection')),
             ('RESTART', gettext.gettext('Restart Connection')),
@@ -525,8 +527,7 @@ class Application(Gtk.Application):
         for config_name, config_id in sorted(self.name_configs.items()):
             choices.append((f'STARTNAME:{config_name}', gettext.gettext('Start {name}').format(name=config_name)))
         for menu_action, menu_title in choices:
-            menu_item = Gtk.CheckMenuItem.new_with_label(menu_title)
-            menu_item.set_active(startup_action == menu_action)
+            menu_item = StateCheckMenuItem(menu_title, active=(startup_action == menu_action))
             menu_item.connect('activate', self.action_settings_startup, menu_action)
             menu.append(menu_item)
         return menu
@@ -538,8 +539,7 @@ class Application(Gtk.Application):
                 (INDICATOR_MODE_SINGLE, gettext.gettext('Single Icon')),
                 (INDICATOR_MODE_PER_SESSION, gettext.gettext('One Icon per Connection')),
             ):
-            menu_item = Gtk.CheckMenuItem.new_with_label(menu_title)
-            menu_item.set_active(current_mode == mode)
+            menu_item = StateCheckMenuItem(menu_title, active=(current_mode == mode))
             menu_item.connect('activate', self.action_settings_indicator_mode, mode)
             menu.append(menu_item)
         return menu
@@ -608,8 +608,7 @@ class Application(Gtk.Application):
         marker = self.session_marker(session_id)
         if marker:
             label = f'{label} {marker}'
-        menu_item = Gtk.CheckMenuItem.new_with_label(label)
-        menu_item.set_active(self.session_connected(session_id))
+        menu_item = StateCheckMenuItem(label, active=self.session_connected(session_id))
         menu_item.set_submenu(self.construct_menu_session(session_id, header=self.session_description(session_id)))
         return menu_item
 
