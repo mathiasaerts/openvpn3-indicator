@@ -55,9 +55,14 @@ class MultiIndicator():
         return self._identifier
 
     def sub_identifier(self, num):
+        # After a recreate() the ids carry a generation marker, so that the
+        # new objects get D-Bus paths that never collide with the old ones.
+        identifier = self.identifier
+        if self._generation > 0:
+            identifier = f'{identifier}-r{self._generation}'
         if num == 0:
-            return f'{self.identifier}'
-        return f'{self.identifier}-{num}'
+            return identifier
+        return f'{identifier}-{num}'
 
     def sub_indicator(self, num):
         while len(self._sub_indicators) <= num:
@@ -68,15 +73,19 @@ class MultiIndicator():
                 self.default_category
                 )
             sub.set_ordering_index(index)
-            sub.connect('connection-changed', self.on_sub_connection_changed, index)
+            handler = sub.connect('connection-changed', self.on_sub_connection_changed, index)
             self._sub_indicators.append(sub)
+            self._sub_handlers.append(handler)
             self._sub_connected.append(None)
             self._reassert_sources.append(0)
         return self._sub_indicators[num]
 
     def __init__(self, identifier):
         self._identifier = identifier
+        self._generation = 0
         self._sub_indicators = list()
+        # Per slot: handler id of the connection-changed signal.
+        self._sub_handlers = list()
         # Per slot: None = never registered with a StatusNotifierWatcher,
         # True/False = currently registered or not.
         self._sub_connected = list()
@@ -278,6 +287,30 @@ class MultiIndicator():
         logging.info('Repairing indicators')
         self.poke_registration()
         self.reassert()
+
+    @property
+    def generation(self):
+        return self._generation
+
+    def recreate(self):
+        # Drop every AppIndicator object and build new ones with fresh ids on
+        # the next update().  New ids mean new D-Bus object paths, so nothing
+        # collides with old objects that libappindicator may still hold while
+        # a registration is in flight, and a status host has no stale state
+        # for the new items.  The old objects are announced Passive so hosts
+        # hide them right away; they are released as soon as libappindicator
+        # is done with them.
+        self._generation += 1
+        logging.info(f'Recreating indicators (generation {self._generation})')
+        for index, sub in enumerate(self._sub_indicators):
+            self._cancel_reassert(index)
+            sub.disconnect(self._sub_handlers[index])
+            sub.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
+        self._sub_indicators = list()
+        self._sub_handlers = list()
+        self._sub_connected = list()
+        self._reassert_sources = list()
+        self.invalid = True
 
     def update(self):
         if self.invalid:

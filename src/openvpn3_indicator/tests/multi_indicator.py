@@ -4,7 +4,8 @@
 # Manual test for MultiIndicator.
 #
 # Shows two test indicators, hides and re-shows one of them, runs a repair,
-# and quits after TEST_DURATION seconds (default 60).  While it runs, restart
+# re-creates them under fresh ids, and quits after TEST_DURATION seconds
+# (default 60).  While it runs, restart
 # the tray watcher and check that both icons come back and their menus work:
 #
 #   gnome-extensions disable appindicatorsupport@rgcjonas.gmail.com; sleep 3
@@ -71,9 +72,10 @@ class Test(Gtk.Application):
             GLib.timeout_add(int(TEST_DURATION * 1000 * fraction), callback)
 
         GLib.timeout_add(1000, self.on_schedule)
-        at(0.25, self.action_hide_second)
-        at(0.45, self.action_repair)
-        at(0.65, self.action_show_second)
+        at(0.20, self.action_hide_second)
+        at(0.35, self.action_repair)
+        at(0.50, self.action_show_second)
+        at(0.65, self.action_recreate)
         at(1.0, self.action_quit)
 
     def on_schedule(self, *args, **kwargs):
@@ -93,6 +95,11 @@ class Test(Gtk.Application):
     def action_repair(self, *args, **kwargs):
         logging.info('Running repair')
         self.multi_indicator.repair()
+        return GLib.SOURCE_REMOVE
+
+    def action_recreate(self, *args, **kwargs):
+        logging.info('Recreating indicators with fresh ids')
+        self.multi_indicator.recreate()
         return GLib.SOURCE_REMOVE
 
     def action_quit(self, *args, **kwargs):

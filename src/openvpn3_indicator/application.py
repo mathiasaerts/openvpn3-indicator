@@ -87,6 +87,10 @@ class Application(Gtk.Application):
         self.add_main_option('silent', ord('s'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Show less info", None)
         self.clear_secret_storage = False
         self.add_main_option('clear-secret-storage', ord('c'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Remove all data stored in secret storage", None)
+        self.add_main_option('repair', ord('r'), GLib.OptionFlags.NONE, GLib.OptionArg.NONE, "Ask the running instance to re-create its tray icons and exit", None)
+        repair_action = Gio.SimpleAction.new('repair', None)
+        repair_action.connect('activate', self.on_action_repair)
+        self.add_action(repair_action)
         self.connect('handle-local-options', self.on_handle_local_options)
         self.connect('startup', self.on_startup)
         self.connect('activate', self.on_activate)
@@ -108,17 +112,73 @@ class Application(Gtk.Application):
         elif options.get('verbose', False):
             level = logging.ERROR
         logging.basicConfig(level = level)
+        if options.get('repair', False):
+            # Forward the request to the running instance through the exported
+            # action group.  If no instance is running this process becomes
+            # the primary one and simply starts up; there is nothing to repair
+            # yet in that case.
+            try:
+                self.register(None)
+            except GLib.Error as excp:
+                logging.critical(f'Failed to register application: {excp.message}')
+                return 1
+            if self.get_is_remote():
+                self.activate_action('repair', None)
+                # The remote activation is sent asynchronously; make sure it
+                # has left this process before we exit.
+                try:
+                    self.get_dbus_connection().flush_sync(None)
+                except GLib.Error as excp:
+                    logging.warning(f'Failed to flush D-Bus connection: {excp.message}')
+                return 0
         return -1
 
     def on_activate(self, data):
         self.info(f'Activate')
-        # Also emitted on the running instance when the user launches the
-        # application a second time.  Treat that as a request to repair the
-        # tray icons.  During the initial activation no indicator exists yet,
-        # so this is a no-op then.
-        if hasattr(self, 'multi_indicator'):
-            self.multi_indicator.repair()
-            self.invalid_ui = True
+        if self.startup_activation_pending:
+            # First activation of the primary instance, emitted by
+            # Gtk.Application right after startup.
+            self.startup_activation_pending = False
+            return
+        # Emitted on the running instance when the user launches the
+        # application again.  The only reason to do that is a missing tray
+        # icon, so treat it as a repair request.
+        self.repair_indicators()
+
+    def on_action_repair(self, action, parameter):
+        self.info(f'Repair requested')
+        self.repair_indicators()
+
+    def on_startup_activation_done(self):
+        # Runs on the first main loop iteration, after the startup activation.
+        self.startup_activation_pending = False
+        return GLib.SOURCE_REMOVE
+
+    def repair_indicators(self):
+        # Manual repair for a tray icon that went missing for whatever reason:
+        # re-create the indicator objects under fresh ids so the status host
+        # has to build new items from scratch.
+        if not hasattr(self, 'multi_indicator'):
+            return
+        if not self.schedule_alive():
+            self.warning('Scheduler was not running, restarting it')
+            self.schedule_source = GLib.timeout_add(1000, self.on_schedule)
+        try:
+            self.session_bus.get_name_owner('org.kde.StatusNotifierWatcher')
+        except dbus.exceptions.DBusException:
+            self.error('No system tray found on the session bus. Please enable the AppIndicator extension of your desktop.', notify=True)
+            return
+        self.multi_indicator.recreate()
+        self.invalid_ui = True
+        self.refresh_ui()
+        self.info('Tray icons re-created', notify=True)
+
+    def schedule_alive(self):
+        source_id = getattr(self, 'schedule_source', 0)
+        if not source_id:
+            return False
+        source = GLib.MainContext.default().find_source_by_id(source_id)
+        return source is not None and not source.is_destroyed()
 
     def on_open(self, application, files, n_files, hint):
         self.info(f'Open {n_files} {hint}')
@@ -135,6 +195,8 @@ class Application(Gtk.Application):
 
     def on_startup(self, data):
         self.info(f'Startup')
+        self.startup_activation_pending = True
+        GLib.idle_add(self.on_startup_activation_done)
         DBusGMainLoop(set_as_default=True)
 
         bus = dbus.Bus()

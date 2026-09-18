@@ -3,7 +3,7 @@
 openvpn3\-indicator \- Simple indicator application for OpenVPN3
 .SH SYNOPSIS
 .B openvpn3\-indicator
-[\-\^\-help|\-\^\-version|\-\^\-silent|\-\^\-verbose|\-\^\-debug]
+[\-\^\-help|\-\^\-version|\-\^\-silent|\-\^\-verbose|\-\^\-debug|\-\^\-clear\-secret\-storage|\-\^\-repair]
 .SH DESCRIPTION
 This is a simple indicator application that controls OpenVPN3 tunnels.
 It is based on D-Bus interface provided by OpenVPN3 Linux client.
@@ -24,5 +24,13 @@ Show more information
 .TP
 .BR \-d ", " \-\^\-debug
 Show debug information
+.TP
+.BR \-c ", " \-\^\-clear\-secret\-storage
+Remove all credentials stored in the secret storage
+.TP
+.BR \-r ", " \-\^\-repair
+Ask the already running instance to re-create its tray icons and exit.
+Starting the application a second time without options has the same effect.
+Use this when the tray icon has disappeared while the application is still running.
 .SH AUTHORS
 Grzegorz Gutowski <grzegorz.gutowski@uj.edu.pl>

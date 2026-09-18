@@ -97,3 +97,5 @@ You can uninstall the application by running `sudo make uninstall` or `make unde
 ## Usage instructions
 
 Simply click the indicator icon to control OpenVPN3 tunnels: import configurations, connect, pause, resume, and disconnect sessions.
+
+If the tray icon ever disappears while the application is still running (for example after your desktop's tray support was restarted), start `openvpn3-indicator` again: the running instance re-creates its tray icons instead of starting a second copy. `openvpn3-indicator --repair` does the same from a script.
