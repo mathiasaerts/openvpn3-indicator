@@ -98,7 +98,7 @@ You can uninstall the application by running `sudo make uninstall` or `make unde
 
 Simply click the indicator icon to control OpenVPN3 tunnels: import configurations, connect, pause, resume, and disconnect sessions.
 
-By default a single tray icon represents all connections. Its colour follows the overall state: grey while nothing is connected, orange while a connection is being established, coloured once a connection is up. Every imported configuration has its own submenu; a running connection is marked in its label (✓ connected, ⏸ paused, … connecting, ✗ error) and its submenu offers Pause, Resume, Restart and Disconnect.
+By default a single tray icon represents all connections. Its colour follows the overall state: grey while nothing is connected, orange while a connection is being established, coloured once a connection is up. Every imported configuration has its own submenu; a connected one carries a check mark, a paused, connecting or failed one a marker in its label (⏸ … ✗), and its submenu offers Pause, Resume, Restart and Disconnect.
 
 If you prefer one tray icon per running connection, choose *Tray Icon Settings → One Icon per Connection* in the menu, or run:
 

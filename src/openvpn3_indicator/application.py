@@ -55,7 +55,7 @@ from openvpn3_indicator.dialogs.system_checks import construct_appindicator_miss
 from openvpn3_indicator.dialogs.credentials import CredentialsUserInput, construct_credentials_dialog
 from openvpn3_indicator.dialogs.configuration import construct_configuration_select_dialog, construct_configuration_import_dialog, construct_configuration_remove_dialog
 from openvpn3_indicator.dialogs.notification import show_error_dialog, show_warning_notification, show_info_notification
-from openvpn3_indicator.status import get_status_icon, get_status_description, get_status_marker, get_aggregate_icon
+from openvpn3_indicator.status import get_status_icon, get_status_description, get_status_class, get_status_marker, get_aggregate_icon
 
 
 #TODO: Which input slots should not be stored ? (OTPs, etc.)
@@ -516,26 +516,17 @@ class Application(Gtk.Application):
     def construct_menu_settings_startup(self):
         startup_action = self.settings.get_string('startup-action') or ''
         menu = Gtk.Menu()
-        menu_action = ''
-        menu_title = gettext.gettext('No Connection')
-        if startup_action == menu_action:
-            menu_title += ' ✓'
-        menu_item = Gtk.MenuItem.new_with_label(menu_title)
-        menu_item.connect('activate', self.action_settings_startup, menu_action)
-        menu.append(menu_item)
-        menu_action = 'RESTART'
-        menu_title = gettext.gettext('Restart Connection')
-        if startup_action == menu_action:
-            menu_title += ' ✓'
-        menu_item = Gtk.MenuItem.new_with_label(menu_title)
-        menu_item.connect('activate', self.action_settings_startup, menu_action)
-        menu.append(menu_item)
+        # Check items: the status host draws the mark of the selected entry
+        # in the menu's left border (dbusmenu toggle-type "checkmark").
+        choices = [
+            ('', gettext.gettext('No Connection')),
+            ('RESTART', gettext.gettext('Restart Connection')),
+        ]
         for config_name, config_id in sorted(self.name_configs.items()):
-            menu_action = f'STARTNAME:{config_name}'
-            menu_title = gettext.gettext('Start {name}').format(name=config_name)
-            if startup_action == menu_action:
-                menu_title += ' ✓'
-            menu_item = Gtk.MenuItem.new_with_label(menu_title)
+            choices.append((f'STARTNAME:{config_name}', gettext.gettext('Start {name}').format(name=config_name)))
+        for menu_action, menu_title in choices:
+            menu_item = Gtk.CheckMenuItem.new_with_label(menu_title)
+            menu_item.set_active(startup_action == menu_action)
             menu_item.connect('activate', self.action_settings_startup, menu_action)
             menu.append(menu_item)
         return menu
@@ -547,9 +538,8 @@ class Application(Gtk.Application):
                 (INDICATOR_MODE_SINGLE, gettext.gettext('Single Icon')),
                 (INDICATOR_MODE_PER_SESSION, gettext.gettext('One Icon per Connection')),
             ):
-            if current_mode == mode:
-                menu_title += ' \u2713'
-            menu_item = Gtk.MenuItem.new_with_label(menu_title)
+            menu_item = Gtk.CheckMenuItem.new_with_label(menu_title)
+            menu_item.set_active(current_mode == mode)
             menu_item.connect('activate', self.action_settings_indicator_mode, mode)
             menu.append(menu_item)
         return menu
@@ -611,14 +601,23 @@ class Application(Gtk.Application):
         return menu
 
     def construct_menu_item_session(self, label, session_id):
-        # Submenu entry for a running session: name with a status marker,
-        # status text on top of the submenu, then the session operations.
+        # Submenu entry for a running session: a check item that is checked
+        # while the session is connected (drawn in the menu's left border by
+        # the status host), a text marker for the transient states, the
+        # status text on top of the submenu and the session operations below.
         marker = self.session_marker(session_id)
         if marker:
             label = f'{label} {marker}'
-        menu_item = Gtk.MenuItem.new_with_label(label)
+        menu_item = Gtk.CheckMenuItem.new_with_label(label)
+        menu_item.set_active(self.session_connected(session_id))
         menu_item.set_submenu(self.construct_menu_session(session_id, header=self.session_description(session_id)))
         return menu_item
+
+    def session_connected(self, session_id):
+        status = self.session_statuses.get(session_id, None)
+        if status is None:
+            return False
+        return get_status_class(status['major'], status['minor']) == 'active'
 
     def construct_menu_configurations(self, menu, include_sessions):
         # Append one submenu per configuration, sorted by name.  Configurations

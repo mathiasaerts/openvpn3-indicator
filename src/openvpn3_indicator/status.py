@@ -74,9 +74,10 @@ register_status('PROC_STOPPED',           'idle-error', 'Process stopped')
 register_status('PROC_KILLED',            'idle-error', 'Process killed')
 
 
-# Marker appended to a configuration's label in the single-icon menu.
+# Marker appended to a configuration's label in the single-icon menu for the
+# transient states.  A connected session is shown as a checked menu item
+# instead, which status hosts draw in the menu's left border.
 STATUS_MARKERS = {
-    'active':       '\u2713',   # check mark
     'active-error': '\u2717',   # ballot x
     'paused':       '\u23f8',   # pause symbol
     'loading':      '\u2026',   # ellipsis
