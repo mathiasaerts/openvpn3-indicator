@@ -78,6 +78,7 @@ class MultiIndicator():
             self._sub_handlers.append(handler)
             self._sub_connected.append(None)
             self._reassert_sources.append(0)
+            self._sub_menus.append(None)
         return self._sub_indicators[num]
 
     def __init__(self, identifier):
@@ -91,6 +92,9 @@ class MultiIndicator():
         self._sub_connected = list()
         # Per slot: GLib source id of a pending status re-assert, or 0.
         self._reassert_sources = list()
+        # Per slot: the Gtk.Menu currently set on the AppIndicator.
+        self._sub_menus = list()
+        self._empty_menu = None
         self._indicators = dict()
         self.default_icon = f'{APPLICATION_NAME}'
         self.default_description = f'{APPLICATION_TITLE}'
@@ -208,19 +212,32 @@ class MultiIndicator():
                 logging.debug(f'Destroyed Indicator {indicator.identifier}')
             indicator._parent = None
 
+    def set_sub_menu(self, num, menu):
+        # Setting a menu makes libappindicator re-parse it, which closes the
+        # menu if the host has it open, and re-register the item with the
+        # watcher, which makes hosts refresh the icon.  Only do it when the
+        # menu really changed.
+        if menu is None:
+            if self._empty_menu is None:
+                self._empty_menu = Gtk.Menu()
+            menu = self._empty_menu
+        if self._sub_menus[num] is menu:
+            return
+        self.sub_indicator(num).set_menu(menu)
+        self._sub_menus[num] = menu
+
     def commit_indicator(self, indicator, num):
         target = self.sub_indicator(num)
+        # set_icon_full(), set_title() and set_status() only emit when the
+        # value changes.
         target.set_icon_full(indicator.icon, indicator.description)
         target.set_title(indicator.title)
-        if indicator.menu:
-            target.set_menu(indicator.menu)
-        else:
-            target.set_menu(Gtk.Menu())
+        self.set_sub_menu(num, indicator.menu)
         target.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
 
     def hide_indicator(self, num):
         target = self.sub_indicator(num)
-        target.set_menu(Gtk.Menu())
+        self.set_sub_menu(num, None)
         target.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
 
     def on_sub_connection_changed(self, sub, connected, index):
@@ -274,14 +291,37 @@ class MultiIndicator():
         for index in range(len(self._sub_indicators)):
             self._schedule_reassert(index, delay_ms)
 
-    def poke_registration(self):
+    def poke_registration(self, index=None):
         # Setting icon-name to its current value changes nothing visible but
         # makes libappindicator run its watcher connection check again, which
         # exports the object if needed and re-sends RegisterStatusNotifierItem.
         # libappindicator itself never retries a failed registration.
-        for index, sub in enumerate(self._sub_indicators):
+        indices = range(len(self._sub_indicators)) if index is None else [index]
+        for index in indices:
+            sub = self._sub_indicators[index]
             logging.debug(f'Poking registration of indicator slot {index}')
             sub.set_property('icon-name', sub.get_property('icon-name'))
+
+    def object_path(self, index):
+        # Path under which libappindicator exports slot index (it replaces
+        # every non-alphanumeric character of the id with an underscore).
+        clean_id = ''.join(c if c.isalnum() else '_' for c in self.sub_identifier(index))
+        return f'/org/ayatana/NotificationItem/{clean_id}'
+
+    def verify_registration(self, bus_unique_name, registered_items):
+        # registered_items: the watcher's RegisteredStatusNotifierItems.  Hosts
+        # format the entries differently (GNOME: "name@path", KDE: "namepath"),
+        # so just look for our bus name together with the object path.  Poke
+        # the slots that should be visible but are not registered.
+        registered_items = [ str(item) for item in registered_items ]
+        for index, sub in enumerate(self._sub_indicators):
+            if sub.get_status() != AppIndicator3.IndicatorStatus.ACTIVE:
+                continue
+            path = self.object_path(index)
+            if any(bus_unique_name in item and path in item for item in registered_items):
+                continue
+            logging.warning(f'Indicator slot {index} is not registered with the StatusNotifierWatcher, retrying')
+            self.poke_registration(index)
 
     def repair(self):
         logging.info('Repairing indicators')
@@ -310,6 +350,7 @@ class MultiIndicator():
         self._sub_handlers = list()
         self._sub_connected = list()
         self._reassert_sources = list()
+        self._sub_menus = list()
         self.invalid = True
 
     def update(self):

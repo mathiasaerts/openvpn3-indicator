@@ -176,9 +176,26 @@ class Application(Gtk.Application):
             self.error('No system tray found on the session bus. Please enable the AppIndicator extension of your desktop.', notify=True)
             return
         self.multi_indicator.recreate()
+        self.last_ui_signature = None
         self.invalid_ui = True
         self.refresh_ui()
         self.info('Tray icons re-created', notify=True)
+
+    def verify_registration(self):
+        # Every slot that should be visible must be listed by the watcher;
+        # libappindicator does not retry a failed registration by itself.
+        try:
+            watcher = self.session_bus.get_object('org.kde.StatusNotifierWatcher', '/StatusNotifierWatcher')
+            properties = dbus.Interface(watcher, dbus_interface='org.freedesktop.DBus.Properties')
+            registered = properties.Get('org.kde.StatusNotifierWatcher', 'RegisteredStatusNotifierItems', timeout=5)
+        except dbus.exceptions.DBusException as excp:
+            self.debug(f'Cannot read the registered items of the StatusNotifierWatcher: {excp}')
+            return
+        # libappindicator exports the items on the shared GDBus session
+        # connection, which has a different unique name than dbus-python's
+        # self.session_bus.
+        connection = self.get_dbus_connection() or Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self.multi_indicator.verify_registration(str(connection.get_unique_name()), registered)
 
     def schedule_alive(self):
         source_id = getattr(self, 'schedule_source', 0)
@@ -295,6 +312,7 @@ class Application(Gtk.Application):
         # Logical indicators currently shown, keyed by session id, or by None
         # for the indicator that represents the application as a whole.
         self.indicators = dict()
+        self.last_ui_signature = None
         self.settings.connect('changed::indicator-mode', self.on_settings_indicator_mode_changed)
         self.info(f'Indicator mode: {self.indicator_mode}')
 
@@ -396,9 +414,26 @@ class Application(Gtk.Application):
             })
         return plans
 
+    def ui_signature(self):
+        # Everything the indicators and their menus are built from.  While it
+        # is unchanged the existing Gtk.Menu objects are kept: a new menu
+        # closes the menu the user may have open and makes hosts refresh the
+        # icon.
+        return (
+            self.indicator_mode,
+            self.settings.get_string('startup-action'),
+            tuple(sorted(self.sessions)),
+            tuple(sorted(self.config_names.items())),
+            tuple(sorted((config_id, tuple(session_ids)) for config_id, session_ids in self.config_sessions.items())),
+            tuple(sorted(self.session_configs.items())),
+            tuple(sorted((session_id, status['major'], status['minor']) for session_id, status in self.session_statuses.items() if session_id in self.sessions)),
+        )
+
     def refresh_ui(self):
         if not self.invalid_ui:
             return
+        signature = self.ui_signature()
+        rebuild_menus = signature != self.last_ui_signature
         new_indicators = dict()
         for plan in self.plan_indicators():
             indicator = self.indicators.get(plan['key'], None)
@@ -408,9 +443,11 @@ class Application(Gtk.Application):
             indicator.description = plan['description']
             indicator.title = plan['title']
             indicator.order_key = plan['order_key']
-            indicator.menu = plan['menu']()
+            if rebuild_menus or indicator.menu is None:
+                indicator.menu = plan['menu']()
             indicator.active = True
             new_indicators[plan['key']] = indicator
+        self.last_ui_signature = signature
         for key, indicator in self.indicators.items():
             if key not in new_indicators:
                 indicator.close()
@@ -475,6 +512,15 @@ class Application(Gtk.Application):
                         'minor' : openvpn3.StatusMinor(status['minor']),
                         'message' : str(status['message']),
                     }
+                def status_keys(statuses):
+                    return dict([ (session_id, (status['major'], status['minor'])) for session_id, status in statuses.items() ])
+                changed = (
+                    set(new_sessions) != set(self.sessions)
+                    or new_config_names != self.config_names
+                    or new_config_sessions != self.config_sessions
+                    or new_session_configs != self.session_configs
+                    or status_keys(new_session_statuses) != status_keys(self.session_statuses)
+                )
                 self.sessions = new_sessions
                 self.configs = new_configs
                 self.config_names = new_config_names
@@ -490,7 +536,8 @@ class Application(Gtk.Application):
                 self.debug(f'Session configs: {self.session_configs}')
                 self.debug(f'Session statuses: {self.session_statuses}')
                 self.invalid_sessions = False
-                self.invalid_ui = True
+                if changed:
+                    self.invalid_ui = True
             except: #TODO: Catch only expected exceptions
                 self.debug(traceback.format_exc())
                 self.warning(f'Session list refresh failed')
@@ -938,6 +985,7 @@ class Application(Gtk.Application):
             if self.last_invalid + 30 < time.monotonic():
                 self.debug('Forced refresh of sessions')
                 self.invalid_sessions = True
+                self.verify_registration()
             if self.invalid_sessions:
                 self.last_invalid = time.monotonic()
                 self.refresh_sessions()
