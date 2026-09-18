@@ -112,6 +112,13 @@ class Application(Gtk.Application):
 
     def on_activate(self, data):
         self.info(f'Activate')
+        # Also emitted on the running instance when the user launches the
+        # application a second time.  Treat that as a request to repair the
+        # tray icons.  During the initial activation no indicator exists yet,
+        # so this is a no-op then.
+        if hasattr(self, 'multi_indicator'):
+            self.multi_indicator.repair()
+            self.invalid_ui = True
 
     def on_open(self, application, files, n_files, hint):
         self.info(f'Open {n_files} {hint}')
@@ -246,7 +253,7 @@ class Application(Gtk.Application):
         if self.startup_config_id or self.startup_config_name:
             self.info(f'Startup configuration set to {self.startup_config_id or self.startup_config_name}')
 
-        GLib.timeout_add(1000, self.on_schedule)
+        self.schedule_source = GLib.timeout_add(1000, self.on_schedule)
         self.hold()
 
     def on_status_notifier_watcher_owner_changed(self, name, old_owner, new_owner):
@@ -255,8 +262,23 @@ class Application(Gtk.Application):
         self.info(f'StatusNotifierWatcher owner changed from {old_owner or "<none>"} to {new_owner or "<none>"}')
         if not new_owner:
             return
-        self.multi_indicator.reset()
-        self.invalid_ui = True
+        # libappindicator watches this name itself and re-registers every
+        # indicator with the new watcher.  Do not recreate the indicator
+        # objects here: the old objects stay alive until the watcher replies,
+        # so new objects with the same ids could not export their D-Bus paths
+        # ("An object is already exported"), and a Passive status sent while
+        # the shell is still setting up its proxy makes the icon disappear
+        # for good.  Only retry a registration that may have failed while the
+        # watcher was still starting, and do it before the GNOME extension's
+        # 2 s "brute-force" scan registers the same object under a different
+        # id (upstream issue #38).
+        for delay_ms in (1000, 4000):
+            GLib.timeout_add(delay_ms, self.on_watcher_poke)
+
+    def on_watcher_poke(self):
+        if hasattr(self, 'multi_indicator'):
+            self.multi_indicator.poke_registration()
+        return GLib.SOURCE_REMOVE
 
     def refresh_ui(self):
         if self.invalid_ui:
@@ -736,24 +758,30 @@ class Application(Gtk.Application):
             self.action_session_disconnect(None, session_id)
 
     def on_schedule(self):
-        self.debug(f'Schedule')
-        if self.last_invalid + 30 < time.monotonic():
-            self.debug('Forced refresh of sessions')
-            self.invalid_sessions = True
-        if self.invalid_sessions:
-            self.last_invalid = time.monotonic()
-            self.refresh_sessions()
-        if self.invalid_ui:
-            self.refresh_ui()
-        self.multi_notifier.update()
-        if self.startup_config_id or self.startup_config_name:
-            config_id = self.startup_config_id or self.name_configs.get(self.startup_config_name, None)
-            if config_id and len(self.config_sessions[config_id]) == 0:
-                self.debug(f'Starting config {config_id} as requested in startup settings.')
-                self.action_config_connect(None, config_id)
-            self.startup_config_id = None
-            self.startup_config_name = None
-        GLib.timeout_add(1000, self.on_schedule)
+        # Repeating GLib source.  An exception escaping from here would remove
+        # the source and freeze the whole application, so catch everything.
+        try:
+            self.debug(f'Schedule')
+            if self.last_invalid + 30 < time.monotonic():
+                self.debug('Forced refresh of sessions')
+                self.invalid_sessions = True
+            if self.invalid_sessions:
+                self.last_invalid = time.monotonic()
+                self.refresh_sessions()
+            if self.invalid_ui:
+                self.refresh_ui()
+            self.multi_notifier.update()
+            if self.startup_config_id or self.startup_config_name:
+                config_id = self.startup_config_id or self.name_configs.get(self.startup_config_name, None)
+                if config_id and len(self.config_sessions.get(config_id, [])) == 0:
+                    self.debug(f'Starting config {config_id} as requested in startup settings.')
+                    self.action_config_connect(None, config_id)
+                self.startup_config_id = None
+                self.startup_config_name = None
+        except Exception:
+            self.debug(traceback.format_exc())
+            self.warning('Scheduled refresh failed')
+        return GLib.SOURCE_CONTINUE
 
     def action_config_connect(self, _object, config_id):
         self.info(f'Connect Config {config_id}')

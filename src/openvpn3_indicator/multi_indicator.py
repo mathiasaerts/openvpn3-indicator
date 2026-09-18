@@ -25,7 +25,7 @@ import uuid
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+from gi.repository import GLib, Gtk
 try:
     gi.require_version('AyatanaAppIndicator3', '0.1')
     from gi.repository import AyatanaAppIndicator3 as AppIndicator3
@@ -43,6 +43,13 @@ from openvpn3_indicator.about import *
 
 class MultiIndicator():
 
+    # Delay between reconnecting to a StatusNotifierWatcher and re-announcing
+    # the status of the visible indicators.  The GNOME AppIndicator extension
+    # creates a fresh D-Bus proxy for every (re)registered item and GDBusProxy
+    # drops signals until that proxy has loaded its properties, so a NewStatus
+    # sent right after the registration may never be seen by the shell.
+    REASSERT_DELAY_MS = 1500
+
     @property
     def identifier(self):
         return self._identifier
@@ -54,18 +61,27 @@ class MultiIndicator():
 
     def sub_indicator(self, num):
         while len(self._sub_indicators) <= num:
+            index = len(self._sub_indicators)
             sub = AppIndicator3.Indicator.new(
-                self.sub_identifier(len(self._sub_indicators)),
+                self.sub_identifier(index),
                 self.default_icon,
                 self.default_category
                 )
-            sub.set_ordering_index(num)
+            sub.set_ordering_index(index)
+            sub.connect('connection-changed', self.on_sub_connection_changed, index)
             self._sub_indicators.append(sub)
+            self._sub_connected.append(None)
+            self._reassert_sources.append(0)
         return self._sub_indicators[num]
 
     def __init__(self, identifier):
         self._identifier = identifier
         self._sub_indicators = list()
+        # Per slot: None = never registered with a StatusNotifierWatcher,
+        # True/False = currently registered or not.
+        self._sub_connected = list()
+        # Per slot: GLib source id of a pending status re-assert, or 0.
+        self._reassert_sources = list()
         self._indicators = dict()
         self.default_icon = f'{APPLICATION_NAME}'
         self.default_description = f'{APPLICATION_TITLE}'
@@ -198,12 +214,70 @@ class MultiIndicator():
         target.set_menu(Gtk.Menu())
         target.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
 
-    def reset(self):
-        for indicator in self._sub_indicators:
-            indicator.set_menu(Gtk.Menu())
-            indicator.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
-        self._sub_indicators = list()
-        self.invalid = True
+    def on_sub_connection_changed(self, sub, connected, index):
+        # Emitted by libappindicator with False when the StatusNotifierWatcher
+        # disappears from the bus and with True after every successful
+        # RegisterStatusNotifierItem call (also the periodic ones caused by
+        # set_menu()).  Only a real reconnection is interesting here.
+        connected = bool(connected)
+        was_connected = self._sub_connected[index]
+        self._sub_connected[index] = connected
+        if not connected:
+            logging.debug(f'Indicator slot {index} lost its StatusNotifierWatcher')
+            self._cancel_reassert(index)
+        elif was_connected is False:
+            logging.debug(f'Indicator slot {index} reconnected to a StatusNotifierWatcher')
+            self._schedule_reassert(index)
+        elif was_connected is None:
+            logging.debug(f'Indicator slot {index} registered with a StatusNotifierWatcher')
+
+    def _schedule_reassert(self, index, delay_ms=None):
+        self._cancel_reassert(index)
+        if delay_ms is None:
+            delay_ms = self.REASSERT_DELAY_MS
+        self._reassert_sources[index] = GLib.timeout_add(delay_ms, self._on_reassert_timeout, index)
+
+    def _cancel_reassert(self, index):
+        source = self._reassert_sources[index]
+        if source:
+            GLib.source_remove(source)
+            self._reassert_sources[index] = 0
+
+    def _on_reassert_timeout(self, index):
+        self._reassert_sources[index] = 0
+        self.reassert_sub(index)
+        return GLib.SOURCE_REMOVE
+
+    def reassert_sub(self, index):
+        # libappindicator only sends NewStatus when the status changes, so a
+        # Passive/Active round trip is the only way to make a status host
+        # re-read a status it may have cached wrongly.
+        if index >= len(self._sub_indicators):
+            return
+        sub = self._sub_indicators[index]
+        if sub.get_status() != AppIndicator3.IndicatorStatus.ACTIVE:
+            return
+        logging.debug(f'Re-asserting status of indicator slot {index}')
+        sub.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
+        sub.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+
+    def reassert(self, delay_ms=None):
+        for index in range(len(self._sub_indicators)):
+            self._schedule_reassert(index, delay_ms)
+
+    def poke_registration(self):
+        # Setting icon-name to its current value changes nothing visible but
+        # makes libappindicator run its watcher connection check again, which
+        # exports the object if needed and re-sends RegisterStatusNotifierItem.
+        # libappindicator itself never retries a failed registration.
+        for index, sub in enumerate(self._sub_indicators):
+            logging.debug(f'Poking registration of indicator slot {index}')
+            sub.set_property('icon-name', sub.get_property('icon-name'))
+
+    def repair(self):
+        logging.info('Repairing indicators')
+        self.poke_registration()
+        self.reassert()
 
     def update(self):
         if self.invalid:
@@ -221,5 +295,7 @@ class MultiIndicator():
             self.invalid=False
 
     def close(self):
+        for index in range(len(self._sub_indicators)):
+            self._cancel_reassert(index)
         for indicator in list(self._indicators.values()):
             indicator.close()
